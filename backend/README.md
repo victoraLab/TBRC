@@ -24,14 +24,14 @@ It is responsible for:
 
 The backend is usually launched by the Shiny frontend and expects:
 
-- `DATA_TABLE`: path to the generated `sample.tsv`
+- `DATA_TABLE`: path to the generated `sample.json`
 - `INPUTPATH`: path to the FASTQ input directory
 
-The backend then reads run metadata from the `sample.tsv` file and executes the workflow.
+The backend then reads run metadata from the JSON handoff file and executes the workflow.
 
 ## Environment
 
-Create the Conda environment from [`environment.yml`](/Users/tiagobrc/Desktop/TBRC/backend/environment.yml):
+Create the Conda environment from the repository root [`environment.yml`](/Users/tiagobrc/Desktop/TBRC/environment.yml):
 
 ```bash
 conda env create -f environment.yml
@@ -62,7 +62,7 @@ If you want QC, IGBlast, or clonality, you also need:
 ```bash
 cd /path/to/TBRC/backend
 conda activate snakemake
-export DATA_TABLE=/path/to/sample.tsv
+export DATA_TABLE=/path/to/sample.json
 export INPUTPATH=/path/to/input_fastqs
 snakemake --cores 4
 ```

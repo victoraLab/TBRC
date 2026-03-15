@@ -9,7 +9,9 @@ rule trim_reads:
         expand("{destiny}/{sample}/{sample}.R2.fastq", destiny=DEST, sample=SAMPLE)
     params:
         QCinput=expand("{source}", source=FILE_PATH),
-        QCfolder=expand("{destiny}", destiny=DEST)
+        QCfolder=expand("{destiny}", destiny=DEST),
+        read1_cmd=lambda wildcards, input: "zcat" if str(input[0]).lower().endswith(".gz") else "cat",
+        read2_cmd=lambda wildcards, input: "zcat" if str(input[1]).lower().endswith(".gz") else "cat"
     shell:"""
-        zcat {input[0]} | fastx_trimmer -Q33 -f 3 -o {output[0]} && zcat {input[1]} | fastx_trimmer -Q33 -f 3 -o {output[1]}
+        {params.read1_cmd} {input[0]} | fastx_trimmer -Q33 -f 3 -o {output[0]} && {params.read2_cmd} {input[1]} | fastx_trimmer -Q33 -f 3 -o {output[1]}
     """

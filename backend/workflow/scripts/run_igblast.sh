@@ -33,6 +33,8 @@ resolve_aux_path() {
         "${organism_name}_gl.aux"
     )
 
+    # Allow either an exact aux file or a directory containing species-specific
+    # aux files such as mouse_gl.aux and human_gl.aux.
     if [[ -n "${requested_path}" ]]; then
         if [[ -f "${requested_path}" ]]; then
             printf '%s' "${requested_path}"
@@ -48,6 +50,8 @@ resolve_aux_path() {
         return 0
     fi
 
+    # The NCBI IgBlast tarball ships internal_data/ and optional_file/
+    # side-by-side, so search next to IGBLAST_DATA when available.
     if [[ -z "${search_dir}" && -n "${IGBLAST_DATA:-}" ]]; then
         candidate="$(cd "$(dirname "${IGBLAST_DATA}")" && pwd)/optional_file"
         if [[ -d "${candidate}" ]]; then
@@ -75,7 +79,7 @@ normalize_optional() {
     local value="${1:-}"
     local lowered
     lowered="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
-    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" ]]; then
+    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" || "${lowered}" == "none" ]]; then
         return 0
     fi
     printf '%s' "${value}"
@@ -98,10 +102,19 @@ if [[ "${ORGANISM}" == "NA" || -z "${ORGANISM}" ]]; then
     ORGANISM="${SPECIES}"
 fi
 
-if [[ -z "${DB_V}" || -z "${DB_J}" ]]; then
-    PANEL_DIR="${DB_BUILD_ROOT}/${SPECIES}/${PANEL}"
+PANEL_DIR="${DB_BUILD_ROOT}/${SPECIES}/${PANEL}"
+
+# Support partial overrides: callers can provide only one custom DB path and
+# let the script fill in the remaining databases from the species/panel build.
+if [[ -z "${DB_V}" ]]; then
     DB_V="${PANEL_DIR}/${SPECIES}_${PANEL}_V"
+fi
+
+if [[ -z "${DB_D}" ]]; then
     DB_D="${PANEL_DIR}/${SPECIES}_${PANEL}_D"
+fi
+
+if [[ -z "${DB_J}" ]]; then
     DB_J="${PANEL_DIR}/${SPECIES}_${PANEL}_J"
 fi
 
@@ -129,6 +142,8 @@ AUX_PATH="$(resolve_aux_path "${AUX_PATH}" "${SPECIES}" "${ORGANISM}")"
 mkdir -p "${OUTPUT_DIR}"
 
 IGBLAST_OUTPUT="${OUTPUT_DIR}/${SAMPLE_NAME}.igblast.tsv"
+# AIRR outfmt 19 gives downstream-friendly tabular output for optional
+# clonality processing.
 IGBLAST_ARGS=(
     -germline_db_V "${DB_V}"
     -germline_db_J "${DB_J}"

@@ -41,6 +41,10 @@ while getopts ":i:o:s:d:t:y:u:e:k:p:j:r:m:g:q:f:z:l:b:c:v:w:x:I:a:" opt; do
 done
 
 INHERITED_IGBLAST_DATA="${IGBLAST_DATA:-}"
+mkdir -p "${DESTINY}"
+DESTINY_ABS="$(cd "${DESTINY}" && pwd)"
+# The final stage can be re-entered after a partial failure, so keep both the
+# original handoff path and the already-moved result path in play.
 FINAL_FASTA_PATH="${DESTINY}/split1/split2/collapsed/head/final/final.fasta"
 RESULT_FASTA_PATH="${DESTINY}/${SAMPLE}.final.fasta"
 IMGT_READY_FASTA_PATH="${DESTINY}/${SAMPLE}.imgt.ready.fasta"
@@ -49,13 +53,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 QC_SCRIPT="${SCRIPT_DIR}/fasta_qc.R"
 PLATE_QC_SCRIPT="${SCRIPT_DIR}/plate_stats.R"
 PLATE_DEPTH_QC_SCRIPT="${SCRIPT_DIR}/plate_depth_qc.R"
+PLATE_CLONOTYPE_QC_SCRIPT="${SCRIPT_DIR}/plate_clonotype_qc.R"
 IGBLAST_SCRIPT="${SCRIPT_DIR}/run_igblast.sh"
 CLONALITY_SCRIPT="${SCRIPT_DIR}/run_clonality.R"
 PLATE_QC_DIR="${QC_DIR}/plates"
 IGBLAST_DIR="${DESTINY}/igblast"
 CLONALITY_DIR="${DESTINY}/clonality"
 ARCHIVE_NAME="$(basename "${OUTPUT}")"
-ARCHIVE_PATH="${DESTINY}/${ARCHIVE_NAME}"
+ARCHIVE_PATH="${DESTINY_ABS}/${ARCHIVE_NAME}"
 ARCHIVE_FORMAT="${ARCHIVE_FORMAT:-zip}"
 PACKAGE_ROOT="${DESTINY}/.package_${SAMPLE}"
 PACKAGE_DIR="${PACKAGE_ROOT}/${SAMPLE}"
@@ -64,7 +69,7 @@ normalize_optional() {
     local value="${1:-}"
     local lowered
     lowered="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
-    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" ]]; then
+    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" || "${lowered}" == "none" ]]; then
         return 0
     fi
     printf '%s' "${value}"
@@ -84,18 +89,21 @@ IGBLAST_ORGANISM="$(normalize_optional "${IGBLAST_ORGANISM}")"
 ARCHIVE_FORMAT="${ARCHIVE_FORMAT:-zip}"
 EFFECTIVE_IGBLAST_DATA="${IGBLAST_DATA:-${INHERITED_IGBLAST_DATA}}"
 
-mkdir -p "${DESTINY}"
 mkdir -p "${QC_DIR}"
 echo "Working directory: $(pwd)"
 echo "Result directory: ${DESTINY}"
 
-if [[ ! -f "${FINAL_FASTA_PATH}" ]]; then
+if [[ -f "${FINAL_FASTA_PATH}" ]]; then
+    mv "${FINAL_FASTA_PATH}" "${RESULT_FASTA_PATH}"
+elif [[ -f "${RESULT_FASTA_PATH}" ]]; then
+    # A previous final-stage run may already have consumed final.fasta before
+    # failing later during QC, packaging, or transfer.
+    echo "Reusing existing final FASTA from a previous partial final-stage run: ${RESULT_FASTA_PATH}"
+else
     echo "Expected assembled FASTA was not found at ${FINAL_FASTA_PATH}." >&2
     echo "The barcode splitting/assembly stage likely finished without producing final.fasta. Check logs/${SAMPLE}.genfasta.err.log." >&2
     exit 1
 fi
-
-mv "${FINAL_FASTA_PATH}" "${RESULT_FASTA_PATH}"
 
 if [[ "${SHOULD_TRIM,,}" == "true" ]] && command -v Rscript >/dev/null 2>&1; then
     Rscript "${QC_SCRIPT}" "${RESULT_FASTA_PATH}" "${QC_DIR}" "pre_trim"
@@ -129,6 +137,19 @@ if [[ -f "${IMGT_READY_FASTA_PATH}" ]] && command -v Rscript >/dev/null 2>&1; th
 fi
 
 if [[ "${RUN_IGBLAST,,}" == "true" ]]; then
+    echo "IGBlast requested."
+    echo "IGBlast submission fields:"
+    echo "  species=${IGBLAST_SPECIES:-}"
+    echo "  panel=${IGBLAST_PANEL:-}"
+    echo "  bin=${IGBLAST_BIN:-}"
+    echo "  organism=${IGBLAST_ORGANISM:-}"
+    echo "  db_v=${IGBLAST_DB_V:-}"
+    echo "  db_d=${IGBLAST_DB_D:-}"
+    echo "  db_j=${IGBLAST_DB_J:-}"
+    echo "  data=${EFFECTIVE_IGBLAST_DATA:-}"
+    echo "  aux=${IGBLAST_AUX:-}"
+    # Capture stderr separately so skipped-vs-failed IGBlast cases can be
+    # handled without losing the detailed diagnostics.
     if IGBLAST_DATA="${EFFECTIVE_IGBLAST_DATA}" IGBLAST_BIN="${IGBLAST_BIN:-igblastn}" "${IGBLAST_SCRIPT}" "${IMGT_READY_FASTA_PATH}" "${IGBLAST_DIR}" "${SAMPLE}" "${IGBLAST_SPECIES:-human}" "${IGBLAST_PANEL:-ig_all}" "${IGBLAST_DB_V:-}" "${IGBLAST_DB_D:-}" "${IGBLAST_DB_J:-}" "${IGBLAST_AUX:-}" "${IGBLAST_ORGANISM:-human}" 2>/tmp/tbrc_igblast.stderr; then
         echo "IGBlast completed."
     else
@@ -167,10 +188,30 @@ if [[ "${RUN_CLONALITY,,}" == "true" ]]; then
     fi
 fi
 
+CLONALITY_OUTPUT="${CLONALITY_DIR}/${SAMPLE}.clonality.tsv"
+PLATE_CLONOTYPE_INPUT=""
+if [[ -f "${CLONALITY_OUTPUT}" ]]; then
+    PLATE_CLONOTYPE_INPUT="${CLONALITY_OUTPUT}"
+elif [[ -f "${IGBLAST_DIR}/${SAMPLE}.igblast.tsv" ]]; then
+    PLATE_CLONOTYPE_INPUT="${IGBLAST_DIR}/${SAMPLE}.igblast.tsv"
+fi
+
+if [[ -n "${PLATE_CLONOTYPE_INPUT}" ]] && command -v Rscript >/dev/null 2>&1; then
+    if Rscript -e "quit(status = if (requireNamespace('ggplate', quietly = TRUE) && requireNamespace('ggplot2', quietly = TRUE)) 0 else 1)" >/dev/null 2>&1; then
+        if ! Rscript "${PLATE_CLONOTYPE_QC_SCRIPT}" "${PLATE_CLONOTYPE_INPUT}" "${PLATE_QC_DIR}"; then
+            echo "Plate clonotype contamination QC failed and was skipped." >&2
+        fi
+    else
+        echo "Plate clonotype contamination QC skipped because ggplate and/or ggplot2 are not installed." >&2
+    fi
+fi
+
 rm -f "${OUTPUT}" "${ARCHIVE_PATH}"
 rm -rf "${PACKAGE_ROOT}"
 mkdir -p "${PACKAGE_DIR}"
 (
+    # Package outputs under a run-named folder so extracted archives do not mix
+    # files from different runs in a user downloads folder.
     cp "${IMGT_READY_FASTA_PATH}" "${PACKAGE_DIR}/"
     cp "${RESULT_FASTA_PATH}" "${PACKAGE_DIR}/"
     cp -R "${QC_DIR}" "${PACKAGE_DIR}/"
@@ -198,7 +239,8 @@ else
     exit 1
 fi
 
-# Remove intermediates before transfer so cleanup still happens if rsync fails.
+# Remove bulky intermediates before transfer so a later rsync failure does not
+# leave the run directory in an unexpectedly half-cleaned state.
 if [[ "${SHOULD_KEEP,,}" == "false" ]]; then
     rm -rf "${DESTINY}/split1/"
     rm -f "${DESTINY}/${SAMPLE}.fasta"
@@ -208,7 +250,8 @@ if [[ "${SHOULD_KEEP,,}" == "false" ]]; then
     rm -f "${DESTINY}/collapsed.stats.txt"
 fi
 
-# Transfer to the configured results destination
+# Transfer to the configured results destination. Push mode uses rsync over
+# SSH; pull mode simply leaves the archive staged on the HPC.
 if [[ "${SERVER_TRANSFER_MODE:-push}" == "pull" ]]; then
     echo "Transfer mode: pull"
     echo "Remote rsync skipped. Synology should pull: ${ARCHIVE_PATH}"
@@ -240,5 +283,43 @@ fi
 
 echo "${SERVER_STORAGE} ok."
 
-# Send an email notification
-mail -s "Your Clonality Run ${SAMPLE} is completed" "${NOTIFICATION_EMAIL}" <<< "Your clonality run is completed successfully and it was uploaded to the folder: pipelines/tbrc/results/ of ${SERVER_STORAGE}."
+send_notification_email() {
+    local recipient="${1:-}"
+    local subject="$2"
+    local body="$3"
+
+    if [[ -z "${recipient}" ]]; then
+        echo "Notification email skipped: no recipient provided." >&2
+        return 0
+    fi
+
+    echo "Notification recipient: ${recipient}"
+
+    if command -v mail >/dev/null 2>&1; then
+        if mail -s "${subject}" "${recipient}" <<< "${body}"; then
+            echo "Notification email accepted by mail command."
+            return 0
+        fi
+        echo "Notification email failed through mail command." >&2
+        return 1
+    fi
+
+    if command -v sendmail >/dev/null 2>&1; then
+        if printf 'To: %s\nSubject: %s\n\n%s\n' "${recipient}" "${subject}" "${body}" | sendmail -t; then
+            echo "Notification email accepted by sendmail."
+            return 0
+        fi
+        echo "Notification email failed through sendmail." >&2
+        return 1
+    fi
+
+    echo "Notification email skipped: neither mail nor sendmail is available on this host." >&2
+    return 0
+}
+
+EMAIL_SUBJECT="Your Clonality Run ${SAMPLE} is completed"
+EMAIL_BODY="Your clonality run is completed successfully and it was uploaded to the folder: pipelines/tbrc/results/ of ${SERVER_STORAGE}."
+
+if ! send_notification_email "${NOTIFICATION_EMAIL}" "${EMAIL_SUBJECT}" "${EMAIL_BODY}"; then
+    echo "Notification delivery did not complete successfully." >&2
+fi

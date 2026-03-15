@@ -52,7 +52,9 @@ if [[ "${REMOTE_STORAGE_HOST}" == "${REMOTE_STORAGE_BASE_PATH}" ]]; then
   exit 1
 fi
 
-DATA_TABLE="data/runs/${USER_ID}/${RUN_NAME}/sample.tsv"
+# sample.json is written locally by the app, then copied to the HPC run folder
+# before Snakemake starts.
+DATA_TABLE="data/runs/${USER_ID}/${RUN_NAME}/sample.json"
 INPUTPATH="data/runs/${USER_ID}/${RUN_NAME}/"
 
 if [[ "${LOCAL_RUN}" == "1" ]]; then
@@ -77,7 +79,9 @@ if ! ssh "${DTN_HOST}" "${REMOTE_CHECK_COMMAND}"; then
   exit 1
 fi
 
-REMOTE_PULL_COMMAND="mkdir -p '${PIPELINE_ROOT}/data/runs/${USER_ID}' && rsync -a -P"
+# Pull the raw run folder onto the DTN first, excluding Synology metadata
+# folders that otherwise confuse FASTQ discovery downstream.
+REMOTE_PULL_COMMAND="mkdir -p '${PIPELINE_ROOT}/data/runs/${USER_ID}' && rsync -a -P --exclude='@eaDir/' --exclude='@eaDir'"
 if [[ -n "${RSYNC_SSH_OPTION}" ]]; then
   REMOTE_PULL_COMMAND="${REMOTE_PULL_COMMAND} ${RSYNC_SSH_OPTION}"
 fi
@@ -85,4 +89,8 @@ REMOTE_PULL_COMMAND="${REMOTE_PULL_COMMAND} '${RAWDATA_SERVER}${INPUT_FOLDER}' '
 
 ssh "${DTN_HOST}" "${REMOTE_PULL_COMMAND}"
 rsync -a -P "runs/${USER_ID}/${RUN_NAME}/" "${DTN_HOST}:${PIPELINE_ROOT}/data/runs/${USER_ID}/${RUN_NAME}/"
+# Emit a lightweight marker that the Shiny app can parse to improve the
+# runtime estimator without opening or recomputing FASTQ sizes itself.
+INPUT_BYTES="$(ssh "${DTN_HOST}" "find '${PIPELINE_ROOT}/data/runs/${USER_ID}/${RUN_NAME}' -maxdepth 2 -type f \\( -iname '*.fastq' -o -iname '*.fastq.gz' \\) ! -path '*/@eaDir/*' -printf '%s\n' | paste -sd+ - | sed 's/^$/0/' | bc")"
+echo "TBRC_INPUT_BYTES=${INPUT_BYTES:-0}"
 ssh "${SSH_HOST}" "cd '${PIPELINE_ROOT}' && export PATH='${PATH_PREFIX}' && export DATA_TABLE='${DATA_TABLE}' && export INPUTPATH='${INPUTPATH}' && conda activate '${SNAKEMAKE_ENV}' && ./snakemake.sh"

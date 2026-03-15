@@ -32,39 +32,62 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
       padding-left: 22px;
     }
 
-    .sticky-progress {
-      position: fixed;
-      top: 18px;
-      right: 22px;
-      width: min(360px, 32vw);
-      z-index: 2000;
-    }
-
     h1, h2, h3, h4, .control-label {
       color: var(--sage-700);
     }
 
     .hero {
-      background: linear-gradient(135deg, rgba(255,255,255,0.85), rgba(237,244,234,0.95));
+      position: relative;
+      overflow: hidden;
+      background:
+        linear-gradient(0deg, rgba(255,255,255,0.56), rgba(255,255,255,0.56)),
+        url('bcr.png') right center / contain no-repeat,
+        linear-gradient(180deg, #e7f3fb 0%, #f3f7f1 100%);
       border: 1px solid var(--sage-300);
-      border-radius: 24px;
-      padding: 24px 28px;
+      border-radius: 28px;
+      padding: 30px 34px 28px 34px;
       margin-bottom: 22px;
-      box-shadow: 0 18px 40px rgba(71, 99, 78, 0.08);
+      box-shadow: 0 20px 45px rgba(71, 99, 78, 0.09);
+      min-height: 340px;
+    }
+
+    .hero-grid {
+      position: relative;
+      z-index: 2;
+      display: flex;
+      align-items: flex-end;
+      min-height: 240px;
     }
 
     .hero-title {
-      font-size: 30px;
+      font-size: 32px;
       font-weight: 700;
-      letter-spacing: 0.01em;
-      margin: 0 0 8px 0;
+      letter-spacing: 0.015em;
+      margin: 0 0 10px 0;
+      max-width: 760px;
     }
 
     .hero-subtitle {
       color: #4d6954;
       font-size: 15px;
       margin: 0;
-      max-width: 780px;
+      max-width: 720px;
+      line-height: 1.55;
+    }
+
+    .hero-badge {
+      display: none;
+    }
+
+    .hero-copy {
+      display: inline-block;
+      max-width: 620px;
+      background: rgba(255, 255, 255, 0.78);
+      border: 1px solid rgba(205, 221, 207, 0.72);
+      border-radius: 24px;
+      padding: 18px 22px;
+      backdrop-filter: blur(4px);
+      box-shadow: 0 10px 24px rgba(71, 99, 78, 0.08);
     }
 
     .panel-card {
@@ -190,6 +213,20 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
       line-height: 1.5;
     }
 
+    .progress-layout {
+      display: grid;
+      grid-template-columns: minmax(280px, 0.9fr) minmax(320px, 1.1fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .progress-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+    }
+
     @media (max-width: 991px) {
       .main-panel {
         padding-left: 15px;
@@ -200,17 +237,40 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
         font-size: 24px;
       }
 
-      .sticky-progress {
-        position: static;
-        width: auto;
+      .progress-layout {
+        grid-template-columns: 1fr;
       }
+
+      .hero {
+        min-height: 250px;
+        padding: 20px;
+        background-position: center center, center center, center center;
+      }
+
+      .hero-grid {
+        min-height: 190px;
+      }
+
     }
   ")),
 
   useShinyalert(),
   tags$div(
     class = "hero",
-    tags$div(class = "hero-title", "TBRCa Pipeline")
+    tags$div(
+      class = "hero-grid",
+      tags$div(
+        class = "hero-copy",
+        tags$div(
+          class = "hero-title",
+          "TBRCa Pipeline - T and B cell Receptor Clonality analysis"
+        ),
+        tags$p(
+          class = "hero-subtitle",
+          "Plant-based BCR/TCR receptor assembly, QC and annotation"
+        )
+      )
+    )
   ),
 
   sidebarLayout(
@@ -224,7 +284,7 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
         app_radio_buttons("type_input", "Method of input", choices = c("Upload", "Server"), selected = "Server", status = "success", outline = TRUE, animation = "pulse"),
         app_radio_buttons("server_name", "Server to send/get results", choices = c("empty"), status = "success", outline = TRUE, animation = "pulse"),
         textInput("input_folder",  "Folder in server", value = "", placeholder = "plate_001"),
-        fileInput("input_files", "Upload fastq files", accept = c(".gz", ".fastq"), multiple = TRUE)
+        fileInput("input_files", "Upload paired FASTQ files (R1 and R2)", accept = c(".fastq.gz", ".fastq", ".gz"), multiple = TRUE)
       ),
       tags$div(
         class = "panel-card",
@@ -281,11 +341,9 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
           "method",
           "Core assembly pipeline",
           choices = c(
-            "Classic clonality assembly (classic_luka)" = "classic_luka",
-            "PEAR assembly (Under Construction)" = "pear (Under Construction)",
-            "FLASH assembly (Under Construction)" = "flash (Under Construction)",
-            "SULK assembly (Under Construction)" = "sulk (Under Construction)"
+            "Classic clonality assembly (classic_luka)" = "classic_luka"
           ),
+          selected = "classic_luka",
           status = "success",
           outline = TRUE,
           animation = "pulse"
@@ -318,22 +376,27 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
     mainPanel(class = "main-panel",
       fluidRow(
         column(
-          12,
+          4,
           tags$div(
             class = "metric-card",
-            tags$div(class = "metric-label", "Time Saver Counter"),
+            tags$div(class = "metric-label", "Usage"),
+            tags$div(class = "metric-value", textOutput("datasetCountDisplay", inline = TRUE))
+          )
+        ),
+        column(
+          4,
+          tags$div(
+            class = "metric-card",
+            tags$div(class = "metric-label", "Estimated Manual Time Saved"),
             tags$div(class = "metric-value", textOutput("savedTimeDisplay", inline = TRUE))
           )
-        )
-      ),
-      fluidRow(
+        ),
         column(
-          12,
+          4,
           tags$div(
-            class = "panel-card",
-            tags$div(class = "card-title", "Submission Preview"),
-            tags$div(class = "card-note", "This is the metadata that will be written to the run folder and passed to the pipeline."),
-            DT::dataTableOutput("submission_form")
+            class = "metric-card",
+            tags$div(class = "metric-label", "Processing Estimator"),
+            tags$div(class = "metric-value", textOutput("runtimeEstimateDisplay", inline = TRUE))
           )
         )
       ),
@@ -341,19 +404,36 @@ shinyUI(fluidPage(theme = shinytheme("flatly"),
         column(
           12,
           tags$div(
-            class = "panel-card sticky-progress",
-            tags$div(class = "card-title", "Run Progress"),
-            tags$div(class = "card-note", "Submission progress in the app. Detailed live Snakemake rule tracking is not wired yet."),
-            pgPaneUI(
-              pane_id = "thispg",
-              titles = c("Validate", "Stage", "Dispatch", "Workflow", "Export"),
-              pg_ids = c("validate", "stage", "dispatch", "workflow", "export"),
-              title_main = c("Run Progress"),
-              opened = TRUE,
-              top = "0%",
-              right = "0%"
+            class = "progress-layout",
+            tags$div(
+              class = "panel-card",
+              tags$div(class = "card-title", "Run Progress"),
+              tags$div(class = "card-note", "Submission progress in the app. Detailed live Snakemake rule tracking is not wired yet."),
+              pgPaneUI(
+                pane_id = "thispg",
+                titles = c("Validate", "Stage", "Dispatch", "Workflow", "Export"),
+                pg_ids = c("validate", "stage", "dispatch", "workflow", "export"),
+                title_main = c("Run Progress"),
+                opened = TRUE,
+                top = "0%",
+                right = "0%"
+              )
             ),
-            tags$div(class = "status-box", textOutput("progressDetail"))
+            tags$div(
+              class = "progress-stack",
+              tags$div(
+                class = "panel-card",
+                tags$div(class = "card-title", "Status Detail"),
+                tags$div(class = "card-note", "Narrative status updates from the app while the workflow is submitted and packaged."),
+                tags$div(class = "status-box", textOutput("progressDetail"))
+              ),
+              tags$div(
+                class = "panel-card",
+                tags$div(class = "card-title", "Submission Preview"),
+                tags$div(class = "card-note", "This is the metadata that will be written to the run folder and passed to the pipeline."),
+                DT::dataTableOutput("submission_form")
+              )
+            )
           )
         )
       ),

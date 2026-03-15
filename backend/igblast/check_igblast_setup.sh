@@ -17,7 +17,7 @@ normalize_optional() {
     local value="${1:-}"
     local lowered
     lowered="$(printf '%s' "${value}" | tr '[:upper:]' '[:lower:]')"
-    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" ]]; then
+    if [[ -z "${value}" || "${lowered}" == "na" || "${lowered}" == "nan" || "${lowered}" == "null" || "${lowered}" == "none" ]]; then
         return 0
     fi
     printf '%s' "${value}"

@@ -27,6 +27,7 @@
     "igblast_db_v": "",
     "igblast_db_d": "",
     "igblast_db_j": "",
-    "igblast_auxiliary_data": "/ru-auth/local/home/trezende/Downloads/ncbi-igblast-1.22.0/optional_file"
+    "igblast_auxiliary_data": "/ru-auth/local/home/trezende/Downloads/ncbi-igblast-1.22.0/optional_file",
+    "notification_admin_email": "trezende@rockefeller.edu"
   }
 }

@@ -1,5 +1,7 @@
 args <- commandArgs(trailingOnly = TRUE)
 
+suppressPackageStartupMessages(library(ggplot2))
+
 if (length(args) < 3) {
   stop("Usage: Rscript fasta_qc.R <input_fasta> <output_dir> <label>", call. = FALSE)
 }
@@ -8,6 +10,8 @@ input_fasta <- args[1]
 output_dir <- args[2]
 label <- args[3]
 
+# Read sequence lengths directly from FASTA records so the QC step stays
+# independent from any Bioconductor/FASTA parser installation.
 read_fasta_lengths <- function(path) {
   if (!file.exists(path)) {
     stop(sprintf("FASTA file not found: %s", path), call. = FALSE)
@@ -61,24 +65,54 @@ plot_lengths <- function(device_fn, path) {
     device_fn(path, width = 9, height = 5)
   }
 
-  par(mar = c(4.5, 4.5, 3, 1))
-
   if (length(lengths)) {
-    hist(
-      lengths,
-      breaks = 30,
-      col = "#8fad8d",
-      border = "#35523c",
-      main = paste("Contig length distribution:", label),
-      xlab = "Contig length (nt)",
-      ylab = "Count"
-    )
-    grid()
-    mtext(sprintf("n=%s | median=%.1f | mean=%.1f", length(lengths), median(lengths), mean(lengths)))
+    lengths_df <- data.frame(length = lengths)
+    x_range <- range(lengths)
+    # Keep the default plot shape stable across runs by targeting ~30 bins.
+    binwidth <- max(1, ceiling((x_range[2] - x_range[1]) / 30))
+
+    plot_obj <- ggplot(lengths_df, aes(x = length)) +
+      geom_histogram(
+        binwidth = binwidth,
+        fill = "#9ab49a",
+        color = "#294034",
+        linewidth = 0.45,
+        alpha = 0.92,
+        boundary = 0
+      ) +
+      # Scale the density curve onto the histogram count axis so both shapes
+      # can be read together in a single panel.
+      geom_density(
+        aes(y = after_stat(count * binwidth)),
+        color = "#163028",
+        linewidth = 1.05,
+        adjust = 1.05
+      ) +
+      labs(
+        title = paste("Contig length distribution:", label),
+        subtitle = sprintf("n=%s | median=%.1f | mean=%.1f", length(lengths), median(lengths), mean(lengths)),
+        x = "Contig length (nt)",
+        y = "Count"
+      ) +
+      theme_minimal(base_size = 12) +
+      theme(
+        plot.title = element_text(face = "bold", color = "#294034"),
+        plot.subtitle = element_text(color = "#4d6954"),
+        axis.title = element_text(color = "#294034"),
+        axis.text = element_text(color = "#35523c"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_blank()
+      )
+
+    print(plot_obj)
   } else {
-    plot.new()
-    title(main = paste("Contig length distribution:", label))
-    text(0.5, 0.5, "No sequences found in FASTA")
+    empty_plot <- ggplot() +
+      annotate("text", x = 0, y = 0, label = "No sequences found in FASTA", size = 5, color = "#35523c") +
+      labs(title = paste("Contig length distribution:", label)) +
+      theme_void(base_size = 12) +
+      theme(plot.title = element_text(face = "bold", hjust = 0.5, color = "#294034"))
+
+    print(empty_plot)
   }
 
   invisible(dev.off())

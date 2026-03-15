@@ -41,6 +41,9 @@ backend/igblast/refs/*.gl.aux
 *.zip
 *.tar.gz
 
+# Design source files
+*.ai
+
 # Local helper outputs
 /tmp/
 

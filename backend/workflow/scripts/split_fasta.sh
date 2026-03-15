@@ -113,9 +113,9 @@ if [[ ${#head_fastas[@]} -eq 0 ]]; then
     exit 1
 fi
 
-awk '/>/{{sub(">","&"FILENAME"_")}}1' "${head_fastas[@]}" > ${final_output_folder}final.fasta
-sed -i 's/>.*\//>/g' ${final_output_folder}final.fasta
-sed -i 's/\.fasta//g' ${final_output_folder}final.fasta
+awk '/>/ { sub(">", ">" FILENAME "_") } 1' "${head_fastas[@]}" > "${final_output_folder}final.fasta"
+sed -i 's/>.*\//>/g' "${final_output_folder}final.fasta"
+sed -i 's/\.fasta//g' "${final_output_folder}final.fasta"
 
 if [[ ! -s "${final_output_folder}final.fasta" ]]; then
     echo "Final assembled FASTA is missing or empty after genfasta." >&2

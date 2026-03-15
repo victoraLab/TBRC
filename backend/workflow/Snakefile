@@ -2,13 +2,17 @@ import pandas as pd
 import os
 import re
 import glob
+import json
 
 #Get PATH variable
 DATA_TABLE=os.environ.get("DATA_TABLE")
 FILE_PATH=os.path.dirname(DATA_TABLE)
 
 INPUTPATH=os.environ.get("INPUTPATH")
-gz_files = sorted(glob.glob(os.path.join(INPUTPATH, "*.fastq.gz")))
+fastq_files = sorted(
+    glob.glob(os.path.join(INPUTPATH, "*.fastq.gz")) +
+    glob.glob(os.path.join(INPUTPATH, "*.fastq"))
+)
 
 def classify_read(path):
     basename = os.path.basename(path)
@@ -18,8 +22,8 @@ def classify_read(path):
         return "R2"
     return None
 
-read1_matches = [path for path in gz_files if classify_read(path) == "R1"]
-read2_matches = [path for path in gz_files if classify_read(path) == "R2"]
+read1_matches = [path for path in fastq_files if classify_read(path) == "R1"]
+read2_matches = [path for path in fastq_files if classify_read(path) == "R2"]
 
 if len(read1_matches) != 1 or len(read2_matches) != 1:
     raise ValueError(
@@ -43,8 +47,8 @@ def sample_name_from_reads(read1_path, read2_path):
         r'([_\.-])L\d{3}([_\.-]|$)',
     ]
 
-    base1 = re.sub(r'\.fastq\.gz$', '', read1_name, flags=re.IGNORECASE)
-    base2 = re.sub(r'\.fastq\.gz$', '', read2_name, flags=re.IGNORECASE)
+    base1 = re.sub(r'\.fastq(\.gz)?$', '', read1_name, flags=re.IGNORECASE)
+    base2 = re.sub(r'\.fastq(\.gz)?$', '', read2_name, flags=re.IGNORECASE)
 
     for pattern in patterns:
         base1 = re.sub(pattern, r'\1', base1, flags=re.IGNORECASE)
@@ -59,8 +63,30 @@ def sample_name_from_reads(read1_path, read2_path):
     return base1
 
 SAMPLE = sample_name_from_reads(READ1_GZ, READ2_GZ)
-#Variables 
-samples_df=pd.read_table('{}'.format(DATA_TABLE))
+#Variables
+def load_samples_table(path):
+    if path is None:
+        raise ValueError("DATA_TABLE is not set.")
+
+    if os.path.exists(path):
+        if path.lower().endswith(".json"):
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            if isinstance(payload, dict):
+                return pd.DataFrame([payload])
+            if isinstance(payload, list):
+                return pd.DataFrame(payload)
+            raise ValueError("Unsupported JSON metadata structure in {}.".format(path))
+        return pd.read_table(path)
+
+    if path.lower().endswith(".json"):
+        legacy_path = re.sub(r"\.json$", ".tsv", path, flags=re.IGNORECASE)
+        if os.path.exists(legacy_path):
+            return pd.read_table(legacy_path)
+
+    raise FileNotFoundError("Metadata file not found: {}".format(path))
+
+samples_df = load_samples_table('{}'.format(DATA_TABLE))
 #SAMPLE=list(samples_df['basename'])
 SOUR=list(samples_df['source'])
 DEST=list(samples_df['dest'])
