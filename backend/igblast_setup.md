@@ -21,7 +21,8 @@ So the backend should be organized around a fixed database build layout, not man
 1. `igblastn`
 2. `makeblastdb`
 3. `edit_imgt_file.pl` from the standalone IgBlast distribution
-3. R packages:
+4. the `internal_data/` directory from the standalone IgBlast distribution
+5. R packages:
    - `clonality`
    - `ggplate`
    - `ggplot2`
@@ -42,6 +43,14 @@ conda activate snakemake
 R CMD INSTALL /path/to/clonality_0.10.tar.gz
 ```
 
+You can also install it directly from the Victora Lab GitHub repository:
+
+```bash
+conda activate snakemake
+Rscript -e "install.packages('remotes', repos='https://cloud.r-project.org')"
+Rscript -e "remotes::install_github('victoraLab/clonality')"
+```
+
 ## Required IGBlast reference setup
 
 1. Put the raw IMGT germline FASTA sets under:
@@ -50,10 +59,14 @@ R CMD INSTALL /path/to/clonality_0.10.tar.gz
 2. Put `edit_imgt_file.pl` under:
    - [`backend/igblast/bin/edit_imgt_file.pl`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/bin)
    or make it available in `PATH`
-3. Put optional auxiliary files under:
+3. Put the NCBI IgBlast `internal_data/` directory under:
+   - [`backend/igblast/internal_data`](/Users/tiagobrc/Desktop/TBRC/backend/igblast)
+   or export `IGBLAST_DATA` to that directory on the server
+4. Put optional auxiliary files under:
    - [`backend/igblast/refs/human.gl.aux`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/refs)
    - [`backend/igblast/refs/mouse.gl.aux`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/refs)
-4. Build the combined panel databases with:
+   or point config at the NCBI `optional_file/` directory
+5. Build the combined panel databases with:
 
 ```bash
 cd /path/to/TBRC/backend/igblast
@@ -72,11 +85,39 @@ The build script now:
 - runs `edit_imgt_file.pl` on the combined FASTA
 - then runs `makeblastdb` on the edited FASTA
 
-5. The built databases will appear under:
+Recommended validation flow on the server:
+
+```bash
+cd /path/to/TBRC/backend/igblast
+./check_igblast_setup.sh mouse ig_all
+./smoke_test_igblast.sh /path/to/sample.imgt.ready.fasta mouse ig_all
+```
+
+Use a small real FASTA first. If that works, the pipeline-side IGBlast step should work too.
+
+What `ready` should mean before you redeploy:
+
+1. `./check_igblast_setup.sh mouse ig_all` exits `0`
+2. `./check_igblast_setup.sh human ig_all` exits `0`
+3. `./check_igblast_setup.sh mouse tcr_all` exits `0`
+4. `./smoke_test_igblast.sh /path/to/sample.imgt.ready.fasta mouse ig_all` writes a non-empty TSV
+5. `igblastn` in the `snakemake` environment no longer complains about missing `internal_data`
+
+Notes:
+- `edit_imgt_file.pl` may live either in [`backend/igblast/bin`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/bin) or in the active `PATH`
+- `internal_data` may live either in [`backend/igblast/internal_data`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/internal_data) or wherever `IGBLAST_DATA` points
+- species `.gl.aux` files are recommended and used automatically when present
+- `cluster.igblast_auxiliary_data` may be either a single aux file or the whole NCBI `optional_file/` directory
+- if no aux override is set, the backend tries [`backend/igblast/refs`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/refs) first and then the `optional_file/` directory next to `IGBLAST_DATA`
+
+6. The built databases will appear under:
    - [`backend/igblast/work`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/work)
-6. Fill these fields in [`frontend/server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json):
+7. Fill these fields in [`frontend/server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json):
    - `cluster.igblast_bin`
-   - optionally `cluster.igblast_auxiliary_data` if you want to override the species-specific `refs/<species>.gl.aux` convention
+   - optionally `cluster.igblast_data` if your `internal_data` directory lives outside [`backend/igblast/internal_data`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/internal_data)
+   - optionally `cluster.igblast_auxiliary_data` if you want to override the species-specific aux resolution with either one file or an `optional_file/` directory
+
+The pipeline no longer needs manual per-run `V/D/J` database paths in config if the panel builds under [`backend/igblast/work`](/Users/tiagobrc/Desktop/TBRC/backend/igblast/work) are present. Species and receptor scope come from the Shiny form, and the backend resolves the matching built databases automatically.
 
 Minimal command shape:
 
@@ -125,3 +166,21 @@ backend/igblast/db/human/TRBJ.fasta
 - final auxiliary data files for human and mouse
 - whether you want to expose additional narrow scopes like `TRG only` or `TRD only` later
 - whether the clonality package tarball will live in the repo, home directory, or a shared software path
+
+## Fast server checklist
+
+```bash
+conda activate snakemake
+which igblastn
+which makeblastdb
+perl backend/igblast/bin/edit_imgt_file.pl 2>/dev/null || true
+
+cd /path/to/TBRC/backend/igblast
+./setup_igblast_databases.sh mouse ig_all
+./setup_igblast_databases.sh human ig_all
+./setup_igblast_databases.sh mouse tcr_all
+./check_igblast_setup.sh mouse ig_all
+./check_igblast_setup.sh human ig_all
+./check_igblast_setup.sh mouse tcr_all
+./smoke_test_igblast.sh /path/to/sample.imgt.ready.fasta mouse ig_all
+```

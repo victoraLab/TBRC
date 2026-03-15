@@ -104,7 +104,8 @@ productive_keep <- productive_flags %in% c("", "true", "t", "productive", "yes")
 clonality_input <- clonality_input[productive_keep, , drop = FALSE]
 
 if (!nrow(clonality_input)) {
-  stop("No productive IGBlast records were available for clonality analysis.", call. = FALSE)
+  message("No productive IGBlast records were available for clonality analysis.")
+  quit(save = "no", status = 2)
 }
 
 clonality_output <- clonality::clonality(

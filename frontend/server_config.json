@@ -22,10 +22,11 @@
     "snakemake_env": "snakemake",
     "path_prefix": "/rugpfs/fs0/vict_lab/scratch/trezende/anaconda3/condabin:/ru-auth/local/home/trezende/local/bin/:/usr/lib64/qt-3.3/bin:/ru-auth/local/home/trezende/perl5/bin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/ru-auth/local/home/trezende/bin/",
     "igblast_bin": "igblastn",
+    "igblast_data": "/ru-auth/local/home/trezende/Downloads/ncbi-igblast-1.22.0/internal_data",
     "igblast_organism": "human",
     "igblast_db_v": "",
     "igblast_db_d": "",
     "igblast_db_j": "",
-    "igblast_auxiliary_data": ""
+    "igblast_auxiliary_data": "/ru-auth/local/home/trezende/Downloads/ncbi-igblast-1.22.0/optional_file"
   }
 }

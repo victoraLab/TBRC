@@ -1,28 +1,88 @@
-# TBRC ( T and B Receptor Clonality )
+# TBRC Backend
 
-This is a snakemake pipeline that processes amplicon sequencing of T or B cell receptor.
+This directory contains the Snakemake backend for TBRC.
 
-## Setup expectations
+It is responsible for:
 
-The workflow is launched by the Shiny frontend and depends on these environment variables:
+- read trimming
+- paired-read assembly
+- barcode-based demultiplexing
+- final FASTA generation
+- QC generation
+- optional IGBlast annotation
+- optional clonality analysis
+- packaging and optional result transfer
+
+## Main Entry Points
+
+- [`workflow/Snakefile`](/Users/tiagobrc/Desktop/TBRC/backend/workflow/Snakefile)
+- [`workflow/rules/`](/Users/tiagobrc/Desktop/TBRC/backend/workflow/rules)
+- [`workflow/scripts/`](/Users/tiagobrc/Desktop/TBRC/backend/workflow/scripts)
+- [`igblast/`](/Users/tiagobrc/Desktop/TBRC/backend/igblast)
+
+## Runtime Expectations
+
+The backend is usually launched by the Shiny frontend and expects:
 
 - `DATA_TABLE`: path to the generated `sample.tsv`
-- `INPUTPATH`: directory containing the run FASTQ files
+- `INPUTPATH`: path to the FASTQ input directory
 
-Result delivery is configured upstream in [`frontend/server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json), and the final step now exports to the configured `results_path` instead of hardcoded host/IP pairs.
+The backend then reads run metadata from the `sample.tsv` file and executes the workflow.
 
-## Pull Mode
+## Environment
 
-Storage servers can now use `transfer_mode = "pull"` in [`frontend/server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json).
-
-In pull mode:
-
-- the pipeline still builds the final `.tar.gz` archive in the HPC results folder
-- the final step skips outbound rsync to the storage server
-- Synology or another trusted machine should pull the archive on a schedule
-
-Example Synology-side pull command:
+Create the Conda environment from [`environment.yml`](/Users/tiagobrc/Desktop/TBRC/backend/environment.yml):
 
 ```bash
-rsync -avP -e "ssh -p <hpc-port>" <hpc-user>@<hpc-host>:/path/to/TBRC/results/<user>/ /path/to/synology/results/<user>/
+conda env create -f environment.yml
+conda activate snakemake
+```
+
+Useful verification:
+
+```bash
+which snakemake
+which pandaseq
+which cutadapt
+which fastx_trimmer
+which fastx_collapser
+```
+
+If you want QC, IGBlast, or clonality, you also need:
+
+- `Rscript`
+- `ggplot2`
+- `dplyr`
+- `readr`
+- `ggplate`
+- `clonality` for clonality analysis
+
+## Local Run Pattern
+
+```bash
+cd /path/to/TBRC/backend
+conda activate snakemake
+export DATA_TABLE=/path/to/sample.tsv
+export INPUTPATH=/path/to/input_fastqs
+snakemake --cores 4
+```
+
+## Transfer Modes
+
+Transfer behavior is controlled upstream in [`frontend/server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json).
+
+- `push`: backend pushes the final archive to the storage server
+- `pull`: backend keeps the archive locally and another machine should pull it later
+
+## IGBlast
+
+See the full instructions in [`igblast_setup.md`](/Users/tiagobrc/Desktop/TBRC/backend/igblast_setup.md).
+
+The short version is:
+
+```bash
+cd /path/to/TBRC/backend/igblast
+bash setup_igblast_databases.sh
+./check_igblast_setup.sh mouse ig_all
+./smoke_test_igblast.sh /path/to/sample.imgt.ready.fasta mouse ig_all
 ```

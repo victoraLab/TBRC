@@ -1,22 +1,61 @@
-# TBRCa shiny pipeline
+# TBRC Frontend
 
-Shiny app to interactively control the TBRCa (T/B Receptor Cell assembly) snakemake pipeline.
+This directory contains the Shiny frontend for TBRC.
 
-## Portability notes
+It is responsible for:
 
-Machine-specific settings now live in [`server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json):
+- collecting run metadata
+- selecting barcode presets
+- choosing processing options
+- launching upload-mode or server-mode submissions
+- showing submission progress
 
-- `storage_server.*.rawdata_path`: source location for FASTQ discovery or pull
-- `storage_server.*.results_path`: destination location for zipped results
-- `cluster.*`: HPC entry points, pipeline root, and environment details
+## Main Files
 
-To move this app to a different VM or lab server, update the JSON file instead of editing the Shiny code or shell scripts.
+- [`ui.R`](/Users/tiagobrc/Desktop/TBRC/frontend/ui.R)
+- [`server.R`](/Users/tiagobrc/Desktop/TBRC/frontend/server.R)
+- [`global.R`](/Users/tiagobrc/Desktop/TBRC/frontend/global.R)
+- [`server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json)
+- [`scripts/`](/Users/tiagobrc/Desktop/TBRC/frontend/scripts)
 
-## Script behavior
+## Machine-Specific Configuration
 
-The launcher scripts in [`frontend/scripts`](/Users/tiagobrc/Desktop/TBRC/frontend/scripts) now resolve paths relative to the repository, so they no longer depend on `/home/.../ShinyApps/...` being identical on every machine.
+Most machine-specific settings now live in [`server_config.json`](/Users/tiagobrc/Desktop/TBRC/frontend/server_config.json), including:
 
-Important assumption:
+- storage server raw-data paths
+- storage server results paths
+- storage server SSH ports
+- transfer mode
+- cluster hostnames
+- pipeline root
+- backend environment name
+- IGBlast paths
 
-- The final results export uses the configured `results_path` and will create `results/<user_id>/` remotely before running `rsync`.
+To move the app to a new server, update the JSON config rather than editing the R code or shell scripts.
 
+## Required R Packages
+
+At minimum:
+
+```r
+install.packages(c("shiny", "DT", "jsonlite", "shinyalert", "shinyWidgets"))
+```
+
+The app has a fallback path when `shinyWidgets` is missing, but installing it is recommended.
+
+## Local Run
+
+```bash
+cd /path/to/TBRC/frontend
+Rscript -e "shiny::runApp('.', host='127.0.0.1', port=8080)"
+```
+
+## Launcher Scripts
+
+The launcher scripts in [`scripts/`](/Users/tiagobrc/Desktop/TBRC/frontend/scripts) resolve paths relative to the repository, which makes the frontend easier to move between servers.
+
+Important behavior:
+
+- server-mode submissions validate the requested storage folder before launching the backend
+- upload-mode submissions write files under the configured backend input area
+- archive delivery is controlled by backend settings carried through `server_config.json`

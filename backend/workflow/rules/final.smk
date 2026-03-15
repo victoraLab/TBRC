@@ -26,10 +26,11 @@ rule final:
         igblast_db_v=IGBLAST_DB_V,
         igblast_db_d=IGBLAST_DB_D,
         igblast_db_j=IGBLAST_DB_J,
+        igblast_data=IGBLAST_DATA,
         igblast_aux=IGBLAST_AUX,
         notification_email=EMAIL,
         should_keep=KEEP,
     shell:
         """
-        workflow/scripts/final.script.sh -i {input} -o {output} -s {params.base_name} -d {params.base_path} -t {params.trimming_seq} -y {params.should_trim} -u {params.server_user}  -e {params.notification_email} -k {params.should_keep} -p {params.server_results_path} -j {params.server_storage} -r {params.server_ssh_port} -m {params.server_transfer_mode} -g {params.run_igblast} -q {params.run_clonality} -f {params.archive_format} -z {params.igblast_species} -l {params.igblast_panel} -b {params.igblast_bin} -c {params.igblast_organism} -v {params.igblast_db_v} -w {params.igblast_db_d} -x {params.igblast_db_j} -a {params.igblast_aux} > {log.std} 2> {log.error}
+        workflow/scripts/final.script.sh -i {input} -o {output} -s {params.base_name} -d {params.base_path} -t {params.trimming_seq} -y {params.should_trim} -u {params.server_user}  -e {params.notification_email} -k {params.should_keep} -p {params.server_results_path} -j {params.server_storage} -r {params.server_ssh_port} -m {params.server_transfer_mode} -g {params.run_igblast} -q {params.run_clonality} -f {params.archive_format} -z {params.igblast_species} -l {params.igblast_panel} -b {params.igblast_bin} -c {params.igblast_organism} -v {params.igblast_db_v} -w {params.igblast_db_d} -x {params.igblast_db_j} -I {params.igblast_data} -a {params.igblast_aux} > {log.std} 2> {log.error}
         """

@@ -131,6 +131,7 @@ server <- function(input, output, session) {
       igblast_db_v = get_cluster_value(servers_config, "igblast_db_v"),
       igblast_db_d = get_cluster_value(servers_config, "igblast_db_d"),
       igblast_db_j = get_cluster_value(servers_config, "igblast_db_j"),
+      igblast_data = get_cluster_value(servers_config, "igblast_data"),
       igblast_auxiliary_data = get_cluster_value(servers_config, "igblast_auxiliary_data"),
       trim_seq = input$trim_sequence,
       keep_raw = input$keep_intermediate,
@@ -181,6 +182,27 @@ server <- function(input, output, session) {
       status = status,
       output = paste(output, collapse = "\n")
     )
+  }
+
+  summarize_backend_failure <- function(output_text, default_message) {
+    if (is.null(output_text) || !nzchar(output_text)) {
+      return(default_message)
+    }
+
+    if (grepl("Folder not found on", output_text, fixed = TRUE)) {
+      return("The requested folder was not found on the selected server.")
+    }
+
+    if (grepl("Missing required arguments\\.", output_text) ||
+        grepl("Error in rule", output_text, fixed = TRUE) ||
+        grepl("Submitted batch job", output_text, fixed = TRUE) ||
+        grepl("Missing output files:", output_text, fixed = TRUE) ||
+        grepl("Complete log:", output_text, fixed = TRUE) ||
+        grepl("server-side submission failed", output_text, fixed = TRUE)) {
+      return(default_message)
+    }
+
+    output_text
   }
 
   # Update the choices for the folder dropdown
@@ -480,15 +502,16 @@ server <- function(input, output, session) {
       
       result <- run_script(app_script("goUpload.bash"), cmd_args)
       if (result$status != 0) {
+        failure_text <- summarize_backend_failure(
+          result$output,
+          "The server-side workflow failed. Please check the backend logs."
+        )
         shinyalert(
           title = "Submission failed",
-          text = paste(
-            "The upload submission command failed.",
-            if (nzchar(result$output)) result$output else "Please check the server logs."
-          ),
+          text = failure_text,
           type = "error"
         )
-        set_progress_detail("Upload submission failed.", result$output)
+        set_progress_detail("Upload submission failed.", failure_text)
         return()
       }
       
@@ -547,15 +570,17 @@ server <- function(input, output, session) {
       # Running the snakemake script on the cluster
       result <- run_script(app_script("goServer.bash"), cmd_args)
       if (result$status != 0) {
+        failure_text <- summarize_backend_failure(
+          result$output,
+          "The server-side workflow failed. Please check the backend logs."
+        )
+        failure_title <- if (grepl("Folder not found on", result$output, fixed = TRUE)) "Folder not found" else "Submission failed"
         shinyalert(
-          title = "Folder not found",
-          text = paste(
-            "The folder in server was not found or the server-side submission failed.",
-            if (nzchar(result$output)) result$output else "Please confirm the remote folder name and try again."
-          ),
+          title = failure_title,
+          text = failure_text,
           type = "error"
         )
-        set_progress_detail("Remote submission failed.", result$output)
+        set_progress_detail("Remote submission failed.", failure_text)
         return()
       }
       
@@ -563,7 +588,10 @@ server <- function(input, output, session) {
         "Remote submission sent.",
         "The HPC command returned to the app.",
         "Look for pre-trim and post-trim histograms, plate QC, and the .imgt.ready.fasta file in the result bundle.",
-        "If the selected storage server is in pull mode, Synology should fetch the zip from the HPC results folder."
+        sprintf(
+          "If the selected storage server is in pull mode, Synology should fetch the %s archive from the HPC results folder.",
+          form()["archive_format", "Submission"]
+        )
       )
       pgPaneUpdate("thispg", "workflow", 100)
       pgPaneUpdate("thispg", "export", 100)

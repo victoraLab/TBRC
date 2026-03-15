@@ -33,6 +33,9 @@ frontend/bc/*/
 
 # Generated IGBlast build outputs
 backend/igblast/work/
+backend/igblast/internal_data/
+backend/igblast/bin/edit_imgt_file.pl
+backend/igblast/refs/*.gl.aux
 
 # Local archives and packaged deliverables
 *.zip
@@ -40,3 +43,6 @@ backend/igblast/work/
 
 # Local helper outputs
 /tmp/
+
+# Private local deployment config
+scripts/deploy_config.sh
